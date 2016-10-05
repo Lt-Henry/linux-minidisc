@@ -38,10 +38,9 @@ typedef struct {
 } netmd_ekb;
 
 /**
-   linked list, storing all information of the single packets, send to the device
-   while uploading a track
+   This structure stores all information needed for the download
 */
-typedef struct netmd_track_packets {
+typedef struct netmd_track_packet {
     /** encrypted key for this packet (8 bytes) */
     unsigned char *key;
 
@@ -54,9 +53,7 @@ typedef struct netmd_track_packets {
     /** length of the data */
     size_t length;
 
-    /** next packet to transfer (linked list) */
-    struct netmd_track_packets *next;
-} netmd_track_packets;
+} netmd_track_packet;
 
 /**
    Format of the song data packets, that are transfered over USB.
@@ -189,12 +186,17 @@ netmd_error netmd_secure_get_track_uuid(netmd_dev_handle *dev, uint16_t track,
 netmd_error netmd_secure_delete_track(netmd_dev_handle *dev, uint16_t track,
                                       unsigned char *signature);
 
-netmd_error netmd_prepare_packets(unsigned char* data, size_t data_lenght,
-                                  netmd_track_packets **packets,
-                                  size_t *packet_count,
+/**
+   Crypt data before download
+*/
+netmd_error netmd_prepare_packet(unsigned char* data, size_t data_lenght,
+                                  netmd_track_packet **packet,
                                   unsigned char *key_encryption_key);
 
-void netmd_cleanup_packets(netmd_track_packets **packets);
+/**
+   Free packet
+*/
+void netmd_cleanup_packet(netmd_track_packet **packet);
 
 netmd_error netmd_secure_set_track_protection(netmd_dev_handle *dev,
                                               unsigned char mode);

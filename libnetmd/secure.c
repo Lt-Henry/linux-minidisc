@@ -385,9 +385,8 @@ void netmd_transfer_song_packets(netmd_dev_handle *dev,
     }
 }
 
-netmd_error netmd_prepare_packets(unsigned char* data, size_t data_lenght,
-                                  netmd_track_packets **packets,
-                                  size_t *packet_count,
+netmd_error netmd_prepare_packet(unsigned char* data, size_t data_lenght,
+                                  netmd_track_packet **packet,
                                   unsigned char *key_encryption_key)
 {
     size_t position = 0;
