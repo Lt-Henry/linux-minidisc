@@ -386,13 +386,9 @@ void netmd_transfer_song_packets(netmd_dev_handle *dev,
 }
 
 netmd_error netmd_prepare_packet(unsigned char* data, size_t data_lenght,
-                                  netmd_track_packet **packet,
+                                  netmd_track_packet *packet,
                                   unsigned char *key_encryption_key)
 {
-    size_t position = 0;
-    size_t chunksize = 0xffffffffU;
-    netmd_track_packets *last = NULL;
-    netmd_track_packets *next = NULL;
 
     gcry_cipher_hd_t key_handle;
     gcry_cipher_hd_t data_handle;
@@ -401,89 +397,53 @@ netmd_error netmd_prepare_packet(unsigned char* data, size_t data_lenght,
 
     netmd_error error = NETMD_NO_ERROR;
 
-
     gcry_cipher_open(&key_handle, GCRY_CIPHER_DES, GCRY_CIPHER_MODE_ECB, 0);
     gcry_cipher_open(&data_handle, GCRY_CIPHER_DES, GCRY_CIPHER_MODE_CBC, 0);
     gcry_cipher_setkey(key_handle, key_encryption_key, 8);
 
-
     /* generate initial iv */
     gcry_create_nonce(iv, sizeof(iv));
 
-    *packet_count = 0;
-    while (position < data_lenght) {
-        if ((data_lenght - position) < chunksize) {
-            /* limit chunksize for last packet */
-            chunksize = data_lenght - position;
-        }
 
-        if ((chunksize % 8) != 0) {
-            chunksize = chunksize + 8 - (chunksize % 8);
-        }
+    /* make some room for packet data */
+    packet->iv = malloc(8);
+    packet->key = malloc(8);
+    packet->length=data_length;
+    packet->data = malloc(packet->length);
+    memset(packet->data, 0, packet->length);
 
-        /* alloc memory */
-        next = malloc(sizeof(netmd_track_packets));
-        next->length = chunksize;
-        next->data = malloc(next->length);
-        memset(next->data, 0, next->length);
-        next->iv = malloc(8);
-        next->key = malloc(8);
-        next->next = NULL;
+    /* generate key */
+    gcry_randomize(rand, sizeof(rand), GCRY_STRONG_RANDOM);
+    gcry_cipher_decrypt(key_handle, packet->key, 8, rand, sizeof(rand));
 
-        /* linked list */
-        if (last != NULL) {
-            last->next = next;
-        }
-        else {
-            *packets = next;
-        }
 
-        /* generate key */
-        gcry_randomize(rand, sizeof(rand), GCRY_STRONG_RANDOM);
-        gcry_cipher_decrypt(key_handle, next->key, 8, rand, sizeof(rand));
-
-        /* crypt data */
-        memcpy(next->iv, iv, 8);
-        gcry_cipher_setiv(data_handle, iv, 8);
-        gcry_cipher_setkey(data_handle, rand, sizeof(rand));
-        gcry_cipher_encrypt(data_handle, next->data, chunksize, data + position, chunksize);
-        memcpy(iv, data + position - 8, 8);
-
-        /* next packet */
-        position = position + chunksize;
-        (*packet_count)++;
-        last = next;
-    }
-
+    /* crypt data */
+    memcpy(packet->iv, iv, 8);
+    gcry_cipher_setiv(data_handle, iv, 8);
+    gcry_cipher_setkey(data_handle, rand, sizeof(rand));
+    gcry_cipher_encrypt(data_handle, packet->data, packet->length, data , length);
+	
     gcry_cipher_close(key_handle);
     gcry_cipher_close(data_handle);
 
     return error;
 }
 
-void netmd_cleanup_packets(netmd_track_packets **packets)
+void netmd_cleanup_packet(netmd_track_packet *packet)
 {
-    netmd_track_packets *current = *packets;
-    netmd_track_packets *last;
 
-    while (current != NULL) {
-        last = current;
-        current = last->next;
-
-        free(last->data);
-        free(last->iv);
-        free(last->key);
-        free(last);
-        last = NULL;
-    }
+    /* check for null pointers? */
+    free(packet->data);
+    free(packet->iv);
+    free(packet->key);
+    memset(packet,0,sizeof(netmd_track_packet));
 }
 
 netmd_error netmd_secure_send_track(netmd_dev_handle *dev,
                                     netmd_wireformat wireformat,
                                     unsigned char discformat,
                                     unsigned int frames,
-                                    netmd_track_packets *packets,
-                                    size_t packet_count,
+                                    netmd_track_packet *packet,
                                     unsigned char *sessionkey,
 
                                     uint16_t *track, unsigned char *uuid,

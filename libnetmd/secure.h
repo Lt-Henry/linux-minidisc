@@ -190,13 +190,13 @@ netmd_error netmd_secure_delete_track(netmd_dev_handle *dev, uint16_t track,
    Crypt data before download
 */
 netmd_error netmd_prepare_packet(unsigned char* data, size_t data_lenght,
-                                  netmd_track_packet **packet,
+                                  netmd_track_packet *packet,
                                   unsigned char *key_encryption_key);
 
 /**
    Free packet
 */
-void netmd_cleanup_packet(netmd_track_packet **packet);
+void netmd_cleanup_packet(netmd_track_packet *packet);
 
 netmd_error netmd_secure_set_track_protection(netmd_dev_handle *dev,
                                               unsigned char mode);
