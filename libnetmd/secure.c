@@ -348,41 +348,31 @@ size_t netmd_get_frame_size(netmd_wireformat wireformat)
     return 0;
 }
 
-void netmd_transfer_song_packets(netmd_dev_handle *dev,
-                                 netmd_track_packets *packets)
+void netmd_transfer_song_packet(netmd_dev_handle *dev,
+                                 netmd_track_packet *packet)
 {
-    netmd_track_packets *p;
-    unsigned char *packet, *buf;
-    size_t packet_size;
-    int error;
+
+    int status;
+    unsigned char* buffer,* buf;
+    size_t buffer_size;
     int transferred = 0;
 
-    p = packets;
-    while (p != NULL) {
-        /* length + key + iv + data */
-        packet_size = 8 + 8 + 8 + p->length;
-        packet = malloc(packet_size);
-        buf = packet;
+    /* length + key + iv + data */
+    buffer_size = 8 + 8 + 8 + packet->length;
+    buffer = malloc(buffer_size);
+    
+    buf = buffer;
 
-        /* build packet... */
-        netmd_copy_quadword_to_buffer(&buf, p->length);
-        memcpy(buf, p->key, 8);
-        memcpy(buf + 8, p->iv, 8);
-        memcpy(buf + 16, p->data, p->length);
+    /* build packet... */
+    /* TODO:there is no need to have the whole track data duplicated */
+    
+    netmd_copy_quadword_to_buffer(&buf, packet->length);
+    memcpy(buf, packet->key, 8);
+    memcpy(buf + 8, packet->iv, 8);
+    memcpy(buf + 16, packet->data, packet->length);
 
-        /* ... send it */
-        error = libusb_bulk_transfer((libusb_device_handle*)dev, 2, packet, (int)packet_size, &transferred, 10000);
-        netmd_log(NETMD_LOG_DEBUG, "%d %d\n", packet_size, error);
+    status = libusb_bulk_transfer((libusb_device_handle*)dev, 2, buffer, (int)buffer_size, &transferred, 1000);
 
-        /* cleanup */
-        free(packet);
-        buf = NULL;
-
-        if (error >= 0) {
-            p = p->next;
-        }
-        break;
-    }
 }
 
 netmd_error netmd_prepare_packet(unsigned char* data, size_t data_lenght,
@@ -445,7 +435,6 @@ netmd_error netmd_secure_send_track(netmd_dev_handle *dev,
                                     unsigned int frames,
                                     netmd_track_packet *packet,
                                     unsigned char *sessionkey,
-
                                     uint16_t *track, unsigned char *uuid,
                                     unsigned char *content_id)
 {
@@ -469,7 +458,8 @@ netmd_error netmd_secure_send_track(netmd_dev_handle *dev,
     *(buf++) = discformat & 0xffU;
     netmd_copy_doubleword_to_buffer(&buf, frames, 0);
 
-    totalbytes = netmd_get_frame_size(wireformat) * frames + packet_count * 24U;
+	/* total bytes = frame_size*num_frames + packet_size(8b) + key(8b) + iv(8b) */
+    totalbytes = netmd_get_frame_size(wireformat) * frames + 24U;
     netmd_copy_doubleword_to_buffer(&buf, totalbytes, 0);
 
     netmd_send_secure_msg(dev, 0x28, cmd, sizeof(cmd));
@@ -479,7 +469,7 @@ netmd_error netmd_secure_send_track(netmd_dev_handle *dev,
     netmd_check_response(&response, 0x00, &error);
 
     if (error == NETMD_NO_ERROR) {
-        netmd_transfer_song_packets(dev, packets);
+        netmd_transfer_song_packet(dev, packet);
 
         error = netmd_recv_secure_msg(dev, 0x28, &response, NETMD_STATUS_ACCEPTED);
         netmd_check_response_bulk(&response, cmdhdr, sizeof(cmdhdr), &error);

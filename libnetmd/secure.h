@@ -143,10 +143,8 @@ netmd_error netmd_secure_send_track(netmd_dev_handle *dev,
                                     netmd_wireformat wireformat,
                                     unsigned char discformat,
                                     unsigned int frames,
-                                    netmd_track_packets *packets,
-                                    size_t packet_count,
+                                    netmd_track_packet *packet,
                                     unsigned char *sessionkey,
-
                                     uint16_t *track, unsigned char *uuid,
                                     unsigned char *content_id);
 
