@@ -356,6 +356,8 @@ void netmd_transfer_song_packet(netmd_dev_handle *dev,
     unsigned char* buffer,* buf;
     size_t buffer_size;
     int transferred = 0;
+    int completed = 0;
+    int error = 0;
 
     /* length + key + iv + data */
     buffer_size = 8 + 8 + 8 + packet->length;
@@ -371,11 +373,46 @@ void netmd_transfer_song_packet(netmd_dev_handle *dev,
     memcpy(buf + 8, packet->iv, 8);
     memcpy(buf + 16, packet->data, packet->length);
 
-    status = libusb_bulk_transfer((libusb_device_handle*)dev, 2, buffer, (int)buffer_size, &transferred, 1000);
+    printf("size to transfer:%d\n",buffer_size);
+	sleep(3);
+    while (completed==0 && error==0) {
+    
+        printf("[bulk]\n");
+    
+        status = libusb_bulk_transfer((libusb_device_handle*)dev, 2, buffer, (int)buffer_size, &transferred, 10000);
+        
+        printf("status:%d\n",status);
+        
+        switch (status) {
+        
+            case 0:
+                completed=1;
+                printf("Transfer completed!\n");
+            break;
+            
+            case LIBUSB_ERROR_TIMEOUT:
+                if (transferred>0) {
+                    buffer_size-=transferred;
+                    buffer+=transferred;
+                    printf("Transferred:%d remaining:%d\n",transferred,buffer_size);
+                }
+                else {
+                    error=1;
+                    netmd_log(NETMD_LOG_ERROR,"Timeout transfering data");
+                }
+            break;
+            
+            default:
+                error=1;
+                netmd_log(NETMD_LOG_ERROR,"libusb_bulk_transfer error:%d",status);
+        }
+    }
+    
 
+    
 }
 
-netmd_error netmd_prepare_packet(unsigned char* data, size_t data_lenght,
+netmd_error netmd_prepare_packet(unsigned char* data, size_t data_length,
                                   netmd_track_packet *packet,
                                   unsigned char *key_encryption_key)
 {
@@ -411,7 +448,7 @@ netmd_error netmd_prepare_packet(unsigned char* data, size_t data_lenght,
     memcpy(packet->iv, iv, 8);
     gcry_cipher_setiv(data_handle, iv, 8);
     gcry_cipher_setkey(data_handle, rand, sizeof(rand));
-    gcry_cipher_encrypt(data_handle, packet->data, packet->length, data , length);
+    gcry_cipher_encrypt(data_handle, packet->data, packet->length, data , data_length);
 	
     gcry_cipher_close(key_handle);
     gcry_cipher_close(data_handle);
@@ -459,8 +496,11 @@ netmd_error netmd_secure_send_track(netmd_dev_handle *dev,
     netmd_copy_doubleword_to_buffer(&buf, frames, 0);
 
 	/* total bytes = frame_size*num_frames + packet_size(8b) + key(8b) + iv(8b) */
-    totalbytes = netmd_get_frame_size(wireformat) * frames + 24U;
+    totalbytes = (netmd_get_frame_size(wireformat) * frames) + 24U;
     netmd_copy_doubleword_to_buffer(&buf, totalbytes, 0);
+
+    printf("frames:%d\n",frames);
+    printf("totalbytes:%d\n",totalbytes);
 
     netmd_send_secure_msg(dev, 0x28, cmd, sizeof(cmd));
     error = netmd_recv_secure_msg(dev, 0x28, &response, NETMD_STATUS_INTERIM);
@@ -469,6 +509,7 @@ netmd_error netmd_secure_send_track(netmd_dev_handle *dev,
     netmd_check_response(&response, 0x00, &error);
 
     if (error == NETMD_NO_ERROR) {
+        printf("transfering...\n");
         netmd_transfer_song_packet(dev, packet);
 
         error = netmd_recv_secure_msg(dev, 0x28, &response, NETMD_STATUS_ACCEPTED);

@@ -435,7 +435,7 @@ int main(int argc, char* argv[])
                                           0x00, 0x00, 0x00, 0x48, 0xA2, 0x8D,
                                           0x3E, 0x1A, 0x3B, 0x0C, 0x44, 0xAF,
                                           0x2f, 0xa0 };
-            netmd_track_packets *packets = NULL;
+            netmd_track_packet packet;
             size_t packet_count = 0;
             struct stat stat_buf;
             unsigned char *data;
@@ -508,22 +508,24 @@ int main(int argc, char* argv[])
             data_size = (size_t)stat_buf.st_size;
             data = malloc(data_size);
             f = fopen(argv[2], "rb");
-            fseek(f, 60, SEEK_CUR);
-            fread(data, data_size - 60, 1, f);
+            //fseek(f, 60, SEEK_CUR);
+            fread(data, data_size , 1, f);
             fclose(f);
-            error = netmd_prepare_packets(data, data_size-60, &packets, &packet_count, kek);
+            printf("preparing packet...\n");
+            error = netmd_prepare_packet(data, data_size, &packet, kek);
             puts(netmd_strerror(error));
 
+            printf("send track...\n");
             /* send to device */
-            error = netmd_secure_send_track(devh, NETMD_WIREFORMAT_LP2,
-                                            NETMD_DISKFORMAT_LP2,
-                                            (data_size - 60) / 192, packets,
-                                            packet_count, sessionkey,
+            error = netmd_secure_send_track(devh, NETMD_WIREFORMAT_PCM,
+                                            NETMD_DISKFORMAT_SP_STEREO,
+                                            data_size / 2048, &packet,
+                                            sessionkey,
                                             &track, uuid, new_contentid);
             puts(netmd_strerror(error));
 
             /* cleanup */
-            netmd_cleanup_packets(&packets);
+            netmd_cleanup_packet(&packet);
 
             /* set title */
             netmd_log(NETMD_LOG_DEBUG, "New Track: %d\n", track);
